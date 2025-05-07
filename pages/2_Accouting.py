@@ -35,6 +35,24 @@ def main():
         page_icon="📊",
         layout="wide"
     )
+    
+    # Load the password from environment variable
+    APP_PASSWORD = os.getenv("PASSWORD")
+    
+    # Check if user is authenticated in session state
+    if 'authenticated' not in st.session_state:
+        st.session_state['authenticated'] = False
+
+    if not st.session_state['authenticated']:
+        # Ask user to input password
+        password_input = st.text_input("🔒 Enter Password to Unlock", type="password")
+        if password_input == APP_PASSWORD:
+            st.session_state['authenticated'] = True
+            st.success("✅ Access granted! Welcome to the Accouting Dashboard.")
+        else:
+            st.warning("Please enter the correct password to continue.")
+            st.stop()  # Stop here if not authenticated
+            
     st.title("📊 **Accounting Dashboard**")
     st.markdown("### Gain Insights Into Your Payments")
 
@@ -195,6 +213,41 @@ def main():
                         save_to_supabase(df_prepared, supabase, TABLE_NAME)
             except Exception as e:
                 st.error(f"❌ An error occurred: {e}")
+        
+        #Last Payment for reference
+        expander = st.expander("Check Last Payment")
+        last_payment = supabase.table(TABLE_NAME) \
+            .select("*") \
+            .order("id", desc=True) \
+            .limit(1) \
+            .execute()
+        
+        data = last_payment.data
+
+        if data: 
+            last_row = data[0] 
+
+            payment_id = last_row.get("id")
+            created_at = last_row.get("created_at")
+            payment_value = last_row.get("payment_value")
+            payment_category = last_row.get("payment_category")
+            payment_date = last_row.get("payment_date")
+            payment_agent = last_row.get("payment_agent")
+            payment_description = last_row.get("payment_description")
+
+            expander.write(f'''
+                Payment ID: {payment_id} \n
+                Created At: {created_at} \n
+                Payment Value: {payment_value} \n
+                Payment Category: {payment_category} \n
+                Payment Date: {payment_date} \n
+                Payment Agent: {payment_agent} \n
+                Payment Description: {payment_description} \n
+            ''')
+
+        else:
+            expander.write("No data found.")
+
 
 if __name__ == "__main__":
     main()

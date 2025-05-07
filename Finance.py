@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import matplotlib.pyplot as plt
 from backend.api.monday import df_sales
 from supabase import create_client, Client
 from dotenv import load_dotenv
@@ -18,11 +19,30 @@ pd.set_option('future.no_silent_downcasting', True)
 supabase: Client = create_client(SUPABASE_BASE_URL, SUPABASE_API_KEY)
 
 def main():
+    
     st.set_page_config(
         page_title="Finance Dashboard",
         page_icon="📊",
         layout="wide"
     )
+    
+    # Load the password from environment variable
+    APP_PASSWORD = os.getenv("PASSWORD")
+    
+    # Check if user is authenticated in session state
+    if 'authenticated' not in st.session_state:
+        st.session_state['authenticated'] = False
+
+    if not st.session_state['authenticated']:
+        # Ask user to input password
+        password_input = st.text_input("🔒 Enter Password to Unlock", type="password")
+        if password_input == APP_PASSWORD:
+            st.session_state['authenticated'] = True
+            st.success("✅ Access granted! Welcome to the Finance Dashboard.")
+        else:
+            st.warning("Please enter the correct password to continue.")
+            st.stop()  # Stop here if not authenticated
+            
     st.title("📊 **Finance Dashboard**")
     st.markdown("### Compare Revenue and Costs with Detailed Insights")
 
@@ -130,6 +150,37 @@ def main():
         st.markdown("### Cost Distribution by Category")
         cost_distribution = df.groupby("payment_category")["payment_value"].sum()
         st.bar_chart(cost_distribution)
+    
+    col10, col11 = st.columns(2)
+    with col10:
+        st.markdown("### Cost Distribution Pie Chart")
+        labels = cost_distribution.index 
+        sizes = cost_distribution.values 
+
+        fig, ax = plt.subplots()
+        ax.pie(sizes, labels=labels, autopct='%1.1f%%')
+        ax.axis('equal')  
+        st.pyplot(fig)
+    
+    with col11:
+        st.markdown("### Cost Distribution by Category")
+        cost_distribution = df.groupby("payment_category")["payment_value"].sum()
+        st.bar_chart(cost_distribution)
+
+    
+    col12, col13 = st.columns(2)
+    with col12:
+        st.markdown("### Cost Distribution over Revenue")
+        cost_distribution_over_revenue = [x/revenue for x in cost_distribution]
+
+        fig1, ax1 = plt.subplots()
+        ax1.pie(cost_distribution_over_revenue, labels=labels, autopct='%1.1f%%')
+        ax1.axis("equal")
+        st.pyplot(fig1)
+
+
+    st.write(cost_distribution_over_revenue)
+
 
     st.markdown("---")
 
