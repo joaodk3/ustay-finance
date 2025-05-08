@@ -77,6 +77,10 @@ def main():
             (df_sales["Pmt Date"].dt.year == (year_selected if month_index > 1 else year_selected - 1)) &
             (df_sales["Pmt Date"].dt.month == (month_index - 1 if month_index > 1 else 12))
         ]
+    import datetime
+    today = pd.Timestamp(datetime.date.today())
+    filtered_df = filtered_df[filtered_df["Pmt Date"] <= today]
+    previous_period_df = previous_period_df[previous_period_df["Pmt Date"] <= today]
 
     # Convert "Total Amount" to numeric
     filtered_df.loc[:, "Total Amount"] = pd.to_numeric(filtered_df["Total Amount"], errors="coerce")

@@ -15,7 +15,7 @@ supabase: Client = create_client(SUPABASE_BASE_URL, SUPABASE_API_KEY)
 
 # Function to save data to Supabase
 def save_to_supabase(df, supabase_client, table_name):
-    df["payment_date"] = pd.to_datetime(df["payment_date"]).dt.strftime('%Y-%m-%d')  # Convert dates to ISO format
+    df["payment_date"] = pd.to_datetime(df["payment_date"]).dt.strftime('%Y-%m-%d')
     rows = df.to_dict(orient="records")
     errors = []
     for row in rows:
@@ -36,22 +36,19 @@ def main():
         layout="wide"
     )
     
-    # Load the password from environment variable
     APP_PASSWORD = os.getenv("PASSWORD")
     
-    # Check if user is authenticated in session state
     if 'authenticated' not in st.session_state:
         st.session_state['authenticated'] = False
 
     if not st.session_state['authenticated']:
-        # Ask user to input password
         password_input = st.text_input("🔒 Enter Password to Unlock", type="password")
         if password_input == APP_PASSWORD:
             st.session_state['authenticated'] = True
-            st.success("✅ Access granted! Welcome to the Accouting Dashboard.")
+            st.success("✅ Access granted! Welcome to the Accounting Dashboard.")
         else:
             st.warning("Please enter the correct password to continue.")
-            st.stop()  # Stop here if not authenticated
+            st.stop()
             
     st.title("📊 **Accounting Dashboard**")
     st.markdown("### Gain Insights Into Your Payments")
@@ -59,9 +56,8 @@ def main():
     with st.sidebar:
         st.image("https://www.ustayinusa.com/logo.svg")
         st.markdown("### **Accounting Summary**")
-        st.write("Explore accouting Statistics and Submit Payment to Register.")
+        st.write("Explore accounting statistics and submit payment to register.")
 
-    # Initialize mode in session state
     if "mode" not in st.session_state:
         st.session_state["mode"] = "View"
 
@@ -71,14 +67,12 @@ def main():
     def activate_edit():
         st.session_state["mode"] = "Edit"
 
-    # Navigation Buttons
     left, right = st.columns(2)
     left.button("🔍 View Mode", on_click=activate_view, use_container_width=True)
     right.button("✏️ Edit Mode", on_click=activate_edit, use_container_width=True)
 
     st.markdown("<hr>", unsafe_allow_html=True)
 
-    # VIEW MODE
     if st.session_state["mode"] == "View":
         months = ["Whole Year", "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
         years = [2024, 2025]
@@ -92,7 +86,6 @@ def main():
         st.markdown("## **Filtered Payments Overview**")
         st.markdown("---")
 
-        # Fetch data from Supabase
         with st.spinner("Fetching data..."):
             if month_selected == "Whole Year":
                 response = supabase.table(TABLE_NAME).select("*") \
@@ -113,68 +106,73 @@ def main():
                     .filter("payment_date", "lt", end_date) \
                     .execute()
 
-            if response and response.data:
-                df = pd.DataFrame(response.data)
-                df["payment_date"] = pd.to_datetime(df["payment_date"])
+            # Initialize safe defaults
+            total_cost = 0
+            max_cost_per_category = pd.Series(dtype='float64')
+            most_frequent_category = "None"
+            average_payment = 0
+            total_payments = 0
+            expenses_over_time = pd.Series(dtype='float64')
+            top_payments = pd.DataFrame(columns=["payment_date", "payment_description", "payment_value"])
 
-                # Metrics Calculations
-                total_cost = df["payment_value"].sum()
-                max_cost_per_category = df.groupby('payment_category')["payment_value"].sum()
-                most_frequent_category = df["payment_category"].mode()[0]
-                average_payment = df["payment_value"].mean()
-                total_payments = df.shape[0]
+            try:
+                if response and response.data:
+                    df = pd.DataFrame(response.data)
+                    if not df.empty and "payment_date" in df.columns:
+                        df["payment_date"] = pd.to_datetime(df["payment_date"])
 
-                if not max_cost_per_category.empty:
-                    max_category_name = max_cost_per_category.idxmax()
-                    max_category_value = max_cost_per_category.max()
-                    top_cost_percentage = (max_category_value / total_cost) * 100
-                else:
-                    max_category_name = "None"
-                    max_category_value = 0
-                    top_cost_percentage = 0
+                        total_cost = df["payment_value"].sum()
+                        max_cost_per_category = df.groupby('payment_category')["payment_value"].sum()
+                        most_frequent_category = df["payment_category"].mode()[0] if not df["payment_category"].mode().empty else "None"
+                        average_payment = df["payment_value"].mean()
+                        total_payments = df.shape[0]
 
-                # Display Metrics in Rows
-                st.subheader("💡 Key Metrics")
-                col1, col2, col3 = st.columns(3)
-                col1.metric(f"💵 Total Cost ({month_selected} {year_selected})", f"${total_cost:,.2f}")
-                col2.metric("🏷️ Top Cost Category", f"{max_category_name} (${max_category_value:,.2f})")
-                col3.metric("📊 Top Cost %", f"{top_cost_percentage:.2f}%")
+                        expenses_over_time = df.groupby("payment_date")["payment_value"].sum()
+                        top_payments = df.nlargest(5, "payment_value")
+            except Exception as e:
+                st.warning(f"⚠️ Data processing skipped due to: {e}")
 
-                col4, col5, col6 = st.columns(3)
-                col4.metric("💰 Average Payment", f"${average_payment:,.2f}")
-                col5.metric("📄 Total Payments", total_payments)
-                col6.metric("🛠️ Most Frequent Category", most_frequent_category)
-
-                st.markdown("<hr>", unsafe_allow_html=True)
-
-                # Charts and Visualizations
-                st.subheader("📈 **Visual Analytics**")
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.markdown("**Expenses Over Time**")
-                    expenses_over_time = df.groupby("payment_date")["payment_value"].sum()
-                    st.line_chart(expenses_over_time)
-
-                with col2:
-                    st.markdown("**Cost Distribution by Category**")
-                    st.bar_chart(max_cost_per_category)
-
-                st.markdown("<hr>", unsafe_allow_html=True)
-
-                # Top 5 Payments
-                st.subheader("🏆 Top 5 Highest Payments")
-                top_payments = df.nlargest(5, "payment_value")
-                st.table(top_payments[["payment_date", "payment_description", "payment_value"]])
-
+            if total_payments > 0:
+                max_category_name = max_cost_per_category.idxmax() if not max_cost_per_category.empty else "None"
+                max_category_value = max_cost_per_category.max() if not max_cost_per_category.empty else 0
+                top_cost_percentage = (max_category_value / total_cost) * 100 if total_cost > 0 else 0
             else:
-                st.error("⚠️ No data found for the selected period.")
+                max_category_name = "None"
+                max_category_value = 0
+                top_cost_percentage = 0
 
-    # EDIT MODE
+            st.subheader("💡 Key Metrics")
+            col1, col2, col3 = st.columns(3)
+            col1.metric(f"💵 Total Cost ({month_selected} {year_selected})", f"${total_cost:,.2f}")
+            col2.metric("🏷️ Top Cost Category", f"{max_category_name} (${max_category_value:,.2f})")
+            col3.metric("📊 Top Cost %", f"{top_cost_percentage:.2f}%")
+
+            col4, col5, col6 = st.columns(3)
+            col4.metric("💰 Average Payment", f"${average_payment:,.2f}")
+            col5.metric("📄 Total Payments", total_payments)
+            col6.metric("🛠️ Most Frequent Category", most_frequent_category)
+
+            st.markdown("<hr>", unsafe_allow_html=True)
+
+            st.subheader("📈 **Visual Analytics**")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("**Expenses Over Time**")
+                st.line_chart(expenses_over_time)
+
+            with col2:
+                st.markdown("**Cost Distribution by Category**")
+                st.bar_chart(max_cost_per_category)
+
+            st.markdown("<hr>", unsafe_allow_html=True)
+
+            st.subheader("🏆 Top 5 Highest Payments")
+            st.table(top_payments)
+
     elif st.session_state["mode"] == "Edit":
         st.markdown("## ✏️ **Edit Mode: Add or Upload Payments**")
         st.markdown("---")
 
-        # Manual Input Form
         st.subheader("📝 **Manual Input**")
         with st.form("Input Payment"):
             categories = ["Employee", "Profit Withdraw", "Softwares", "Operating Costs", "Inbound Development", "Marketing", "Taxes", "Outbound Development", "Other"]
@@ -199,8 +197,6 @@ def main():
                 else:
                     st.error(f"❌ Failed to submit payment")
 
-
-        # Prepared CSV Upload
         st.subheader("📂 **Upload Prepared CSV**")
         uploaded_file = st.file_uploader("Choose a prepared CSV file", type=["csv"])
         if uploaded_file is not None:
@@ -213,8 +209,7 @@ def main():
                         save_to_supabase(df_prepared, supabase, TABLE_NAME)
             except Exception as e:
                 st.error(f"❌ An error occurred: {e}")
-        
-        #Last Payment for reference
+
         expander = st.expander("Check Last Payment")
         last_payment = supabase.table(TABLE_NAME) \
             .select("*") \
@@ -244,10 +239,8 @@ def main():
                 Payment Agent: {payment_agent} \n
                 Payment Description: {payment_description} \n
             ''')
-
         else:
             expander.write("No data found.")
-
 
 if __name__ == "__main__":
     main()
